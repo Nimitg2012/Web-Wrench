@@ -59,6 +59,9 @@ function empty(): Database {
   return { sites: [], checks: [], links: [], issues: [] }
 }
 
+let memory: Database | null = null
+let loading: Promise<void> | null = null
+
 function read(): Database {
   if (usesPostgres()) {
     if (!memory) throw new Error('The monitoring store is not loaded.')
@@ -95,9 +98,6 @@ function write(db: Database) {
   writeFileSync(temporary, JSON.stringify(db))
   renameSync(temporary, FILE)
 }
-
-let memory: Database | null = null
-let loading: Promise<void> | null = null
 
 function usesPostgres() {
   return process.env.MONITOR_STORE === 'postgres'

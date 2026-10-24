@@ -1,0 +1,17 @@
+export function titleForPath(pathname: string) {
+  if (pathname === '/dashboard') return 'Dashboard'
+  if (pathname === '/websites') return 'My Websites'
+  if (pathname === '/websites/new') return 'Add My Website'
+  if (pathname === '/monitoring') return 'Monitoring'
+  if (pathname === '/monitoring/uptime') return 'Website Uptime'
+  if (pathname === '/monitoring/links') return 'Broken Links'
+  if (pathname === '/monitoring/pages') return 'Important Pages'
+  if (pathname === '/monitoring/forms') return 'Form Monitoring'
+  if (pathname === '/monitoring/checkout') return 'Checkout Monitoring'
+  if (pathname === '/issues') return 'Issues'
+  if (pathname.startsWith('/issues/')) return 'Issue Details'
+  if (pathname === '/assistant') return 'AI Assistant'
+  if (pathname === '/tutorial') return 'Tutorial'
+  if (pathname === '/settings') return 'Settings'
+  return 'Web Wrench'
+}

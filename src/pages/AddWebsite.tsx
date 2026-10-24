@@ -27,7 +27,7 @@ const FEATURES: Array<{ key: keyof FeatureFlags; title: string; body: string }> 
 ]
 
 export function AddWebsite() {
-  const { addWebsite, state, toast, websites } = useApp()
+  const { addWebsite, state, websites } = useApp()
   const navigate = useNavigate()
   const [step, setStep] = useState(1)
   const [url, setUrl] = useState(initialWebsiteUrl)
@@ -37,6 +37,7 @@ export function AddWebsite() {
   const [checkError, setCheckError] = useState('')
   const [checkCode, setCheckCode] = useState('')
   const [result, setResult] = useState<Reachability | null>(null)
+  const [serverSave, setServerSave] = useState<'saved' | 'local' | null>(null)
   const [features, setFeatures] = useState<FeatureFlags>({
     uptime: true,
     brokenLinks: true,
@@ -111,7 +112,7 @@ export function AddWebsite() {
       return
     }
     const websiteName = name.trim() || new URL(normalized).hostname
-    const added = addWebsite({
+    void addWebsite({
       id: createId('site'),
       name: websiteName,
       url: normalized,
@@ -131,14 +132,15 @@ export function AddWebsite() {
         finalUrl: normalized,
         message: checkError || 'No setup check was stored.',
       },
+    }).then((result) => {
+      if (result === 'duplicate') {
+        setUrlError('That website is already saved.')
+        setStep(1)
+        return
+      }
+      setServerSave(result)
+      setStep(6)
     })
-    if (!added) {
-      setUrlError('That website is already saved.')
-      setStep(1)
-      return
-    }
-    toast('Website added. The server will run the first check shortly.', 'success')
-    setStep(6)
   }
 
   return (
@@ -259,9 +261,13 @@ export function AddWebsite() {
       ) : null}
       {step === 6 ? (
         <Card className="space-y-4">
-          <h2 className="text-lg font-semibold">Website added. The first check will run shortly.</h2>
+          <h2 className="text-lg font-semibold">
+            {serverSave === 'saved' ? 'Website added. The first check will run shortly.' : 'Website kept in this browser.'}
+          </h2>
           <p className="text-sm leading-6 text-muted">
-            {name} is saved on the server. Uptime, pages, and links are checked on a schedule. Form tests and checkout automation still do not run.
+            {serverSave === 'saved'
+              ? `${name} is saved on the server. Uptime, pages, and links are checked on a schedule. Form tests and checkout automation still do not run.`
+              : `${name} is stored in this browser only. The monitoring server did not accept it, so monitoring is not active and there are no live results.`}
           </p>
           <div className="flex flex-wrap gap-2">
             <Button onClick={() => navigate('/dashboard')}>Go to dashboard</Button>

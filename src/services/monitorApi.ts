@@ -1,9 +1,10 @@
 import type { Issue, IssueStatus, Website } from '../types/index.ts'
+import { readJson } from './http.ts'
 
 export async function fetchMonitor(): Promise<{ websites: Website[]; issues: Issue[] }> {
   const response = await fetch('/api/monitor')
   if (!response.ok) throw new Error('Monitoring data could not be loaded.')
-  return response.json() as Promise<{ websites: Website[]; issues: Issue[] }>
+  return readJson<{ websites: Website[]; issues: Issue[] }>(response)
 }
 
 export async function createMonitoredWebsite(website: Website) {
@@ -12,7 +13,7 @@ export async function createMonitoredWebsite(website: Website) {
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(website),
   })
-  const body = (await response.json()) as { error?: string; created?: boolean }
+  const body = await readJson<{ error?: string; created?: boolean }>(response)
   if (!response.ok) throw new Error(body.error || 'The website could not be saved.')
   return body
 }
@@ -24,7 +25,7 @@ export async function patchMonitoredWebsite(id: string, patch: Partial<Website>)
     body: JSON.stringify(patch),
   })
   if (!response.ok) {
-    const body = (await response.json().catch(() => ({}))) as { error?: string }
+    const body = await readJson<{ error?: string }>(response).catch(() => ({ error: undefined }))
     throw new Error(body.error || 'The website could not be updated.')
   }
 }

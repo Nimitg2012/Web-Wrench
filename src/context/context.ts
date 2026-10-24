@@ -26,7 +26,7 @@ export interface AppValue {
   options: Website[]
   selected: Website | null
   selectWebsite: (id: string | null) => void
-  addWebsite: (website: Website) => boolean
+  addWebsite: (website: Website) => Promise<'saved' | 'local' | 'duplicate'>
   updateWebsite: (id: string, patch: Partial<Website>) => void
   removeWebsite: (id: string) => void
   setPaused: (id: string, paused: boolean) => void

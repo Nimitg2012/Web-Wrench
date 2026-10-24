@@ -1,4 +1,5 @@
 import type { ChatMessage, Explanation, ExplainRequest } from '../types/index.ts'
+import { readJson } from './http.ts'
 
 export async function checkWebsiteUrl(url: string, signal?: AbortSignal) {
   const response = await fetch('/api/check-url', {
@@ -7,7 +8,7 @@ export async function checkWebsiteUrl(url: string, signal?: AbortSignal) {
     body: JSON.stringify({ url }),
     signal,
   })
-  const data = (await response.json().catch(() => null)) as {
+  const data = await readJson<{
     error?: string
     code?: string
     result?: {
@@ -18,7 +19,10 @@ export async function checkWebsiteUrl(url: string, signal?: AbortSignal) {
       message: string
       checkedAt: string
     }
-  } | null
+  }>(response).catch((error: unknown) => {
+    if (error instanceof Error) throw error
+    throw new Error('The monitoring server is not reachable from this site.')
+  })
   if (!response.ok || !data?.result) {
     const error = new Error(data?.error || 'The setup check could not be completed.')
     return Promise.reject(Object.assign(error, { code: data?.code ?? 'UNREACHABLE' }))
@@ -39,7 +43,7 @@ export async function requestExplanation(input: ExplainRequest, beginner: boolea
       beginner,
     }),
   })
-  const data = (await response.json().catch(() => null)) as { error?: string; explanation?: Explanation } | null
+  const data = await readJson<{ error?: string; explanation?: Explanation }>(response).catch(() => null)
   if (!response.ok || !data?.explanation) {
     throw new Error(data?.error || 'The AI explanation could not be completed.')
   }
@@ -58,7 +62,7 @@ export async function requestChat(messages: ChatMessage[], context: string, begi
       beginner,
     }),
   })
-  const data = (await response.json().catch(() => null)) as { error?: string; reply?: string } | null
+  const data = await readJson<{ error?: string; reply?: string }>(response).catch(() => null)
   if (!response.ok || !data?.reply) {
     throw new Error(data?.error || 'The assistant could not reply.')
   }

@@ -136,10 +136,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     options: [DEMO_WEBSITE, ...websites],
     selected,
     selectWebsite: (id) => patch({ selectedId: id }),
-    addWebsite: (website) => {
+    addWebsite: async (website) => {
       const normalized = normalizeWebsiteUrl(website.url)
       const key = canonicalWebsiteUrl(normalized)
-      if (!key) return false
+      if (!key) return 'duplicate'
       let added = false
       setState((current) => {
         if (current.websites.some((item) => canonicalWebsiteUrl(item.url) === key)) return current
@@ -150,12 +150,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
           selectedId: website.id,
         }
       })
-      if (added) {
-        void createMonitoredWebsite({ ...website, url: normalized, frequency: website.frequency ?? state.monitoringPrefs.defaultFrequency, isDemo: false }).catch((error: unknown) => {
-          toast(error instanceof Error ? error.message : 'The website could not be saved on the server.', 'error')
-        })
+      if (!added) return 'duplicate'
+      try {
+        await createMonitoredWebsite({ ...website, url: normalized, frequency: website.frequency ?? state.monitoringPrefs.defaultFrequency, isDemo: false })
+        return 'saved'
+      } catch (error: unknown) {
+        toast(error instanceof Error ? error.message : 'The website could not be saved on the server.', 'error')
+        return 'local'
       }
-      return added
     },
     updateWebsite,
     removeWebsite: (id) => {

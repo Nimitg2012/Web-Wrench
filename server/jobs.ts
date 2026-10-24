@@ -23,7 +23,7 @@ export async function runDue() {
 
 export async function runSite(siteId: string, work?: { uptime: boolean; pages: boolean; links: boolean }) {
   if (running.has(siteId)) return
-  const snapshot = readSnapshot().websites.find((site) => site.id === siteId)
+  const snapshot = (await readSnapshot()).websites.find((site) => site.id === siteId)
   if (!snapshot || snapshot.paused) return
   const plan = work ?? {
     uptime: snapshot.features.uptime,

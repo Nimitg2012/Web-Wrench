@@ -7,6 +7,26 @@ import { runSite } from './jobs.ts'
 
 const hits = new Map<string, number[]>()
 
+const ALLOWED_ORIGINS = new Set([
+  'https://nimitg2012.github.io',
+  'http://127.0.0.1:5173',
+  'http://localhost:5173',
+])
+
+export function corsHeaders(origin: string | null | undefined) {
+  const allowed = new Set(ALLOWED_ORIGINS)
+  const extra = process.env.CORS_ORIGIN?.trim()
+  if (extra) allowed.add(extra)
+  const headers: Record<string, string> = {
+    vary: 'Origin',
+    'access-control-allow-methods': 'GET, POST, PATCH, DELETE, OPTIONS',
+    'access-control-allow-headers': 'content-type',
+    'access-control-max-age': '86400',
+  }
+  if (origin && allowed.has(origin)) headers['access-control-allow-origin'] = origin
+  return headers
+}
+
 export function createApiMiddleware(env: Record<string, string>) {
   return (req: IncomingMessage, res: ServerResponse, next: (error?: unknown) => void) => {
     const url = new URL(req.url ?? '/', 'http://webwrench.local')
@@ -14,32 +34,58 @@ export function createApiMiddleware(env: Record<string, string>) {
       next()
       return
     }
-    void handle(req, res, url.pathname, env)
+    void (async () => {
+      const headers = corsHeaders(req.headers.origin)
+      for (const [key, value] of Object.entries(headers)) res.setHeader(key, value)
+      if (req.method === 'OPTIONS') {
+        res.statusCode = 204
+        res.end()
+        return
+      }
+      try {
+        const body = req.method === 'GET' || req.method === 'HEAD' ? {} : await readJson(req)
+        const result = await dispatchApi({
+          method: req.method ?? 'GET',
+          pathname: url.pathname,
+          body,
+          ip: clientIp(req),
+          signal: abortOnClose(req, res),
+          env,
+        })
+        send(res, result.status, result.body)
+      } catch (error) {
+        const failed = failure(error)
+        send(res, failed.status, failed.body)
+      }
+    })()
   }
 }
 
-async function handle(req: IncomingMessage, res: ServerResponse, pathname: string, env: Record<string, string>) {
+export async function dispatchApi(input: {
+  method: string
+  pathname: string
+  body: unknown
+  ip: string
+  signal: AbortSignal
+  env: Record<string, string>
+}) {
+  const { method, pathname, ip, signal, env } = input
+  const body = input.body
   try {
-    if (req.method === 'GET' && pathname === '/api/monitor') {
-      if (!allow(clientIp(req), pathname, 120)) {
-        send(res, 429, { error: 'Too many requests. Wait a minute and try again.', code: 'UNREACHABLE' })
-        return
+    if (method === 'GET' && pathname === '/api/monitor') {
+      if (!allow(ip, pathname, 120)) {
+        return { status: 429, body: { error: 'Too many requests. Wait a minute and try again.', code: 'UNREACHABLE' } }
       }
-      send(res, 200, readSnapshot())
-      return
+      return { status: 200, body: await readSnapshot() }
     }
-    if (req.method !== 'POST' && req.method !== 'PATCH' && req.method !== 'DELETE') {
-      send(res, 405, { error: 'That method is not supported.', code: 'INVALID' })
-      return
+    if (method !== 'POST' && method !== 'PATCH' && method !== 'DELETE') {
+      return { status: 405, body: { error: 'That method is not supported.', code: 'INVALID' } }
     }
     const limit = pathname === '/api/check-url' ? 20 : 30
-    if (!allow(clientIp(req), pathname, limit)) {
-      send(res, 429, { error: 'Too many requests. Wait a minute and try again.', code: 'UNREACHABLE' })
-      return
+    if (!allow(ip, pathname, limit)) {
+      return { status: 429, body: { error: 'Too many requests. Wait a minute and try again.', code: 'UNREACHABLE' } }
     }
-    const body = await readJson(req)
-    const signal = abortOnClose(req, res)
-    if (pathname === '/api/websites' && req.method === 'POST') {
+    if (pathname === '/api/websites' && method === 'POST') {
       const url = stringField(body, 'url')
       await assertPublicUrl(url)
       const features = objectField(body, 'features')
@@ -54,8 +100,7 @@ async function handle(req: IncomingMessage, res: ServerResponse, pathname: strin
         checkout: objectField(body, 'checkout') as never,
       })
       if (saved.created) void runSite(saved.site.id)
-      send(res, saved.created ? 201 : 200, { website: saved.site, created: saved.created })
-      return
+      return { status: saved.created ? 201 : 200, body: { website: saved.site, created: saved.created } }
     }
     const websiteMatch = pathname.match(/^\/api\/websites\/([^/]+)(?:\/(pause|resume))?$/)
     if (websiteMatch) {
@@ -63,17 +108,17 @@ async function handle(req: IncomingMessage, res: ServerResponse, pathname: strin
       const action = websiteMatch[2]
       if (action === 'pause' || action === 'resume') {
         const site = await patchSite(id, { paused: action === 'pause' })
-        if (!site) { send(res, 404, { error: 'That website is not saved.', code: 'INVALID' }); return }
+        if (!site) return { status: 404, body: { error: 'That website is not saved.', code: 'INVALID' } }
         if (action === 'resume') void runSite(id)
-        send(res, 200, { website: site })
-        return
+        return { status: 200, body: { website: site } }
       }
-      if (req.method === 'DELETE') {
+      if (method === 'DELETE') {
         const removed = await deleteSite(id)
-        send(res, removed ? 200 : 404, removed ? { ok: true } : { error: 'That website is not saved.', code: 'INVALID' })
-        return
+        return removed
+          ? { status: 200, body: { ok: true } }
+          : { status: 404, body: { error: 'That website is not saved.', code: 'INVALID' } }
       }
-      if (req.method === 'PATCH') {
+      if (method === 'PATCH') {
         const site = await patchSite(id, {
           name: stringField(body, 'name') || undefined,
           frequency: (stringField(body, 'frequency') || undefined) as never,
@@ -82,28 +127,24 @@ async function handle(req: IncomingMessage, res: ServerResponse, pathname: strin
           forms: arrayField(body, 'forms'),
           checkout: objectField(body, 'checkout') as never,
         })
-        if (!site) { send(res, 404, { error: 'That website is not saved.', code: 'INVALID' }); return }
-        send(res, 200, { website: site })
-        return
+        if (!site) return { status: 404, body: { error: 'That website is not saved.', code: 'INVALID' } }
+        return { status: 200, body: { website: site } }
       }
     }
     const issueMatch = pathname.match(/^\/api\/issues\/([^/]+)\/status$/)
-    if (issueMatch && req.method === 'POST') {
+    if (issueMatch && method === 'POST') {
       const status = stringField(body, 'status')
       if (status !== 'active' && status !== 'reviewed' && status !== 'resolved') {
-        send(res, 400, { error: 'Choose active, reviewed, or resolved.', code: 'INVALID' })
-        return
+        return { status: 400, body: { error: 'Choose active, reviewed, or resolved.', code: 'INVALID' } }
       }
       const issue = await setIssueStatus(decodeURIComponent(issueMatch[1] ?? ''), status)
-      if (!issue) { send(res, 404, { error: 'That issue is not saved.', code: 'INVALID' }); return }
-      send(res, 200, { issue })
-      return
+      if (!issue) return { status: 404, body: { error: 'That issue is not saved.', code: 'INVALID' } }
+      return { status: 200, body: { issue } }
     }
     if (pathname === '/api/check-url') {
       const url = stringField(body, 'url')
       const result = await checkPublicUrl(url, signal)
-      send(res, 200, { result })
-      return
+      return { status: 200, body: { result } }
     }
     if (pathname === '/api/ai/explain') {
       const explanation = await explainWithModel(env, {
@@ -114,8 +155,7 @@ async function handle(req: IncomingMessage, res: ServerResponse, pathname: strin
         technical: stringField(body, 'technical'),
         beginner: booleanField(body, 'beginner'),
       }, signal)
-      send(res, 200, { explanation })
-      return
+      return { status: 200, body: { explanation } }
     }
     if (pathname === '/api/ai/chat') {
       const messages = chatField(body)
@@ -124,27 +164,27 @@ async function handle(req: IncomingMessage, res: ServerResponse, pathname: strin
         context: stringField(body, 'context'),
         beginner: booleanField(body, 'beginner'),
       }, signal)
-      send(res, 200, { reply })
-      return
+      return { status: 200, body: { reply } }
     }
-    send(res, 404, { error: 'That API endpoint does not exist.', code: 'INVALID' })
+    return { status: 404, body: { error: 'That API endpoint does not exist.', code: 'INVALID' } }
   } catch (error) {
-    if (isGuardError(error)) {
-      const aiMissing = error.message.includes('GROQ_API_KEY') || error.message.includes('AI_API_KEY')
-      const status = aiMissing ? 503 : error.code === 'INVALID' || error.code === 'BLOCKED' ? 400 : 503
-      send(res, status, { error: error.message, code: aiMissing ? 'AI_UNAVAILABLE' : error.code })
-      return
-    }
-    if (error instanceof Error && error.message === 'BODY_TOO_LARGE') {
-      send(res, 413, { error: 'That request is too large.', code: 'INVALID' })
-      return
-    }
-    if (error instanceof SyntaxError) {
-      send(res, 400, { error: 'Send valid JSON.', code: 'INVALID' })
-      return
-    }
-    send(res, 500, { error: 'The request could not be completed.', code: 'UNREACHABLE' })
+    return failure(error)
   }
+}
+
+function failure(error: unknown) {
+  if (isGuardError(error)) {
+    const aiMissing = error.message.includes('GROQ_API_KEY') || error.message.includes('AI_API_KEY')
+    const status = aiMissing ? 503 : error.code === 'INVALID' || error.code === 'BLOCKED' ? 400 : 503
+    return { status, body: { error: error.message, code: aiMissing ? 'AI_UNAVAILABLE' : error.code } }
+  }
+  if (error instanceof Error && error.message === 'BODY_TOO_LARGE') {
+    return { status: 413, body: { error: 'That request is too large.', code: 'INVALID' } }
+  }
+  if (error instanceof SyntaxError) {
+    return { status: 400, body: { error: 'Send valid JSON.', code: 'INVALID' } }
+  }
+  return { status: 500, body: { error: 'The request could not be completed.', code: 'UNREACHABLE' } }
 }
 
 function send(res: ServerResponse, status: number, body: unknown) {

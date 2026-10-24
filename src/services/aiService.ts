@@ -1,8 +1,9 @@
 import type { ChatMessage, Explanation, ExplainRequest } from '../types/index.ts'
+import { apiUrl } from './apiBase.ts'
 import { readJson } from './http.ts'
 
 export async function checkWebsiteUrl(url: string, signal?: AbortSignal) {
-  const response = await fetch('/api/check-url', {
+  const response = await fetch(apiUrl('/api/check-url'), {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ url }),
@@ -31,7 +32,7 @@ export async function checkWebsiteUrl(url: string, signal?: AbortSignal) {
 }
 
 export async function requestExplanation(input: ExplainRequest, beginner: boolean): Promise<Explanation> {
-  const response = await fetch('/api/ai/explain', {
+  const response = await fetch(apiUrl('/api/ai/explain'), {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
@@ -51,7 +52,7 @@ export async function requestExplanation(input: ExplainRequest, beginner: boolea
 }
 
 export async function requestChat(messages: ChatMessage[], context: string, beginner: boolean) {
-  const response = await fetch('/api/ai/chat', {
+  const response = await fetch(apiUrl('/api/ai/chat'), {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({

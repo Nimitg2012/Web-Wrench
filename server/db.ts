@@ -60,6 +60,10 @@ function empty(): Database {
 }
 
 function read(): Database {
+  if (usesPostgres()) {
+    if (!memory) throw new Error('The monitoring store is not loaded.')
+    return memory
+  }
   try {
     const parsed = JSON.parse(readFileSync(FILE, 'utf8')) as Partial<Database>
     const db = {
@@ -92,13 +96,58 @@ function write(db: Database) {
   renameSync(temporary, FILE)
 }
 
+let memory: Database | null = null
+let loading: Promise<void> | null = null
+
+function usesPostgres() {
+  return process.env.MONITOR_STORE === 'postgres'
+}
+
+async function ensure() {
+  if (!usesPostgres() || memory) return
+  if (!loading) {
+    loading = loadPostgres().finally(() => {
+      loading = null
+    })
+  }
+  await loading
+}
+
+async function loadPostgres() {
+  const { Pool } = await import('pg')
+  const pool = new Pool({ connectionString: process.env.DATABASE_URL, max: 3 })
+  await pool.query(`CREATE TABLE IF NOT EXISTS monitor_state (id text PRIMARY KEY, document jsonb NOT NULL)`)
+  const existing = await pool.query(`SELECT document FROM monitor_state WHERE id = 'main'`)
+  const document = existing.rows[0]?.document
+  memory = document && typeof document === 'object' ? (document as Database) : empty()
+  alignIssueIds(memory)
+  await pool.end()
+}
+
+async function persist(db: Database) {
+  if (!usesPostgres()) {
+    write(db)
+    return
+  }
+  memory = db
+  const { Pool } = await import('pg')
+  const pool = new Pool({ connectionString: process.env.DATABASE_URL, max: 1 })
+  await pool.query(
+    `INSERT INTO monitor_state (id, document) VALUES ('main', $1::jsonb)
+     ON CONFLICT (id) DO UPDATE SET document = EXCLUDED.document`,
+    [JSON.stringify(db)],
+  )
+  await pool.end()
+}
+
 let queue: Promise<unknown> = Promise.resolve()
 
 export function update<T>(change: (db: Database) => T | Promise<T>) {
   const run = queue.then(async () => {
+    await ensure()
     const db = read()
     const result = await change(db)
-    write(db)
+    await persist(db)
     return result
   })
   queue = run.then(
@@ -108,7 +157,8 @@ export function update<T>(change: (db: Database) => T | Promise<T>) {
   return run
 }
 
-export function readSnapshot() {
+export async function readSnapshot() {
+  await ensure()
   return viewAll(read())
 }
 

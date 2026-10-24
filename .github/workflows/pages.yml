@@ -28,6 +28,8 @@ jobs:
       - name: Install dependencies
         run: npm ci
       - name: Build
+        env:
+          VITE_API_ORIGIN: https://br-dawn-darkness-b4rc05hv-api.compute.c-6.us-east-2.aws.neon.tech
         run: npm run build
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3

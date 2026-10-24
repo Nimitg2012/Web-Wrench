@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useState } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { normalizeWebsiteUrl, validatePublicUrlShape } from '../utils/url.ts'
 
@@ -44,7 +44,7 @@ export function Landing() {
       <header className="sticky top-0 z-20 border-b border-line/80 bg-midnight/85 backdrop-blur">
         <div className="mx-auto flex h-16 w-full max-w-6xl items-center justify-between gap-4 px-4 sm:px-6">
           <Link to="/" className="flex min-w-0 items-center gap-2.5">
-            <img src="/favicon.png" alt="" className="h-9 w-9 rounded-xl" />
+            <img src={`${import.meta.env.BASE_URL}favicon.png`} alt="" className="h-9 w-9 rounded-xl" />
             <span className="truncate text-sm font-semibold tracking-tight">Web Wrench</span>
           </Link>
           <nav className="hidden items-center gap-1 md:flex" aria-label="Introduction">

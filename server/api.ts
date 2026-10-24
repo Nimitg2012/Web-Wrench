@@ -216,7 +216,7 @@ function booleanField(body: unknown, key: string) {
   return (body as Record<string, unknown>)[key] !== false
 }
 
-function chatField(body: unknown) {
+function chatField(body: unknown): Array<{ role: 'user' | 'assistant'; content: string }> {
   if (!body || typeof body !== 'object' || !('messages' in body)) return []
   const value = (body as Record<string, unknown>).messages
   if (!Array.isArray(value)) return []

@@ -161,7 +161,12 @@ export function createSite(input: {
   })
 }
 
-export function patchSite(id: string, patch: Partial<Pick<SiteRecord, 'name' | 'paused' | 'frequency' | 'features' | 'pages' | 'forms' | 'checkout'>>) {
+export function patchSite(
+  id: string,
+  patch: Partial<Pick<SiteRecord, 'name' | 'paused' | 'frequency' | 'pages' | 'forms' | 'checkout'>> & {
+    features?: Partial<SiteRecord['features']>
+  },
+) {
   return update((db) => {
     const site = db.sites.find((item) => item.id === id)
     if (!site) return null

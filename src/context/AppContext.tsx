@@ -1,23 +1,11 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import { AppContext } from './context.ts'
+import { AppContext, type AppValue } from './context.ts'
 import { DEMO_ISSUES, DEMO_WEBSITE, demoAssistantReply } from '../data/demoData.ts'
 import { requestChat } from '../services/aiService.ts'
 import { createMonitoredWebsite, deleteMonitoredWebsite, fetchMonitor, patchMonitoredWebsite, setMonitoringPaused, setStoredIssueStatus } from '../services/monitorApi.ts'
 import { applyIssueStates } from '../services/monitoringService.ts'
 import { defaultState, loadState, saveState, type PersistedState } from '../services/storage.ts'
-import type {
-  ChatMessage,
-  CheckoutSetup,
-  ExplainRequest,
-  Frequency,
-  Issue,
-  IssueStatus,
-  Profile,
-  SavedForm,
-  SavedPage,
-  ToastItem,
-  Website,
-} from '../types/index.ts'
+import type { ChatMessage, ExplainRequest, Issue, ToastItem, Website } from '../types/index.ts'
 import { createId } from '../utils/cx.ts'
 import { canonicalWebsiteUrl, normalizeWebsiteUrl } from '../utils/url.ts'
 

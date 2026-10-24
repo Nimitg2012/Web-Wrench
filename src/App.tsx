@@ -18,9 +18,11 @@ import { UptimePage } from './pages/Uptime.tsx'
 import { Websites } from './pages/Websites.tsx'
 import { Link } from 'react-router-dom'
 
+const routerBasename = import.meta.env.BASE_URL === '/' ? undefined : import.meta.env.BASE_URL.replace(/\/$/, '')
+
 export default function App() {
   return (
-    <BrowserRouter>
+    <BrowserRouter basename={routerBasename}>
       <AppProvider>
         <Routes>
           <Route path="/" element={<Landing />} />
